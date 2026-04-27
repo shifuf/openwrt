@@ -29,7 +29,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        force: true
+        fetch-depth: 1
 
     - name: Free up disk space
       run: |
@@ -67,15 +67,17 @@ jobs:
         cd openwrt
         echo "Current OpenWrt version:"
         git describe --tags --always || git log --oneline -1
+        touch feeds.log download.log build.log
 
     - name: Update feeds
       run: |
         cd openwrt
+        set -o pipefail
 
-        # Update main feeds
-        echo "Updating main feeds..."
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+        # Update the default OpenWrt feeds first so custom feed failures are isolated.
+        echo "Updating default feeds..." | tee feeds.log
+        ./scripts/feeds update -a 2>&1 | tee -a feeds.log
+        ./scripts/feeds install -a 2>&1 | tee -a feeds.log
 
         # Add iStoreOS (kiddin9) feed if enabled
         if [ "${{ env.ENABLE_ISTOREOS }}" = "true" ]; then
@@ -88,12 +90,22 @@ jobs:
         echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
         echo "src-git passwall-packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
 
-        # Update all feeds
-        echo "Updating all feeds..."
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a -p kiddin9 || echo "Warning: kiddin9 feed update failed"
-        ./scripts/feeds install -a -p passwall || echo "Warning: passwall feed update failed"
-        ./scripts/feeds install -a -p passwall-packages || echo "Warning: passwall-packages feed update failed"
+        CUSTOM_FEEDS="passwall passwall-packages"
+        if [ "${{ env.ENABLE_ISTOREOS }}" = "true" ]; then
+          CUSTOM_FEEDS="$CUSTOM_FEEDS kiddin9"
+        fi
+
+        echo "Updating custom feeds: $CUSTOM_FEEDS" | tee -a feeds.log
+        ./scripts/feeds update $CUSTOM_FEEDS 2>&1 | tee -a feeds.log
+
+        echo "Installing PassWall feeds..." | tee -a feeds.log
+        ./scripts/feeds install -a -p passwall 2>&1 | tee -a feeds.log
+        ./scripts/feeds install -a -p passwall-packages 2>&1 | tee -a feeds.log
+
+        if [ "${{ env.ENABLE_ISTOREOS }}" = "true" ]; then
+          echo "Installing iStoreOS feed..." | tee -a feeds.log
+          ./scripts/feeds install -a -p kiddin9 2>&1 | tee -a feeds.log
+        fi
 
     - name: Load custom configuration
       run: |
@@ -127,6 +139,7 @@ jobs:
     - name: Download packages
       run: |
         cd openwrt
+        set -o pipefail
         echo "Downloading package sources..."
         make download -j$(nproc) V=s 2>&1 | tee download.log || true
 
@@ -138,6 +151,7 @@ jobs:
     - name: Build firmware
       run: |
         cd openwrt
+        set -o pipefail
         echo "Starting build at $(date)"
         START_TIME=$(date +%s)
 
@@ -182,8 +196,10 @@ jobs:
       with:
         name: build-logs
         path: |
+          openwrt/feeds.log
           openwrt/build.log
           openwrt/download.log
+        if-no-files-found: ignore
         retention-days: 30
 
     - name: Generate release notes

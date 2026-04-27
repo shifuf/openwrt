@@ -23,7 +23,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        force: true
+        fetch-depth: 1
 
     - name: Free up disk space
       run: |
@@ -75,13 +75,15 @@ jobs:
         cd openwrt
         echo "Current OpenWrt version:"
         git describe --tags --always || git log --oneline -1
+        touch feeds.log download.log build.log
 
     - name: Update feeds
       run: |
         cd openwrt
-        echo "Updating feeds..."
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+        set -o pipefail
+        echo "Updating feeds..." | tee feeds.log
+        ./scripts/feeds update -a 2>&1 | tee -a feeds.log
+        ./scripts/feeds install -a 2>&1 | tee -a feeds.log
 
     - name: Load custom configuration
       run: |
@@ -92,12 +94,14 @@ jobs:
     - name: Download packages
       run: |
         cd openwrt
+        set -o pipefail
         echo "Downloading package sources..."
-        make download -j$(nproc)
+        make download -j$(nproc) 2>&1 | tee download.log
 
     - name: Build firmware
       run: |
         cd openwrt
+        set -o pipefail
         echo "Starting build at $(date)"
         START_TIME=$(date +%s)
 
@@ -141,7 +145,10 @@ jobs:
       with:
         name: build-logs
         path: |
+          openwrt/feeds.log
+          openwrt/download.log
           openwrt/build.log
+        if-no-files-found: ignore
         retention-days: 30
 
     - name: Generate release notes

@@ -5,16 +5,34 @@
 编译失败，错误信息：
 ```
 Process completed with exit code 25
-Clone OpenWrt source 步骤失败
+Update feeds 步骤失败
+Unexpected input(s) 'force'
 ```
 
 ## 原因
 
-OpenWrt 版本标签 `v25.12.2` 可能不存在或格式错误。
+这次失败至少有两个独立问题：
+
+1. 工作流里的 `actions/checkout@v4` 使用了不存在的参数 `force`。
+2. `Update feeds` 步骤没有把 `./scripts/feeds` 的完整输出保存下来，所以日志里只有 `exit code 25`，看不到到底是哪个 feed 更新失败。
+
+`Node.js 20 actions are deprecated` 只是 GitHub Actions 的弃用警告，不是这次失败的根因。
 
 ## 解决方案
 
-### 方案 1：使用 main 分支（推荐）
+### 已修复的内容
+
+1. 移除了两个 workflow 中无效的 `force: true`
+2. 为 `Checkout repository` 改成了合法参数 `fetch-depth: 1`
+3. `Update feeds` 现在会生成 `openwrt/feeds.log`
+4. `Upload build logs` 会上传 `feeds.log`、`download.log`、`build.log`
+5. 日志 artifact 在前置步骤失败时不会再因为找不到文件而继续报噪音警告
+
+---
+
+### 重新运行建议
+
+优先直接重新运行修正后的 workflow，先验证工作流配置已经正常。
 
 **步骤**：
 
@@ -25,45 +43,35 @@ OpenWrt 版本标签 `v25.12.2` 可能不存在或格式错误。
 5. 点击 **Run workflow** 开始编译
 
 **说明**：
-- `main` 分支包含最新的 OpenWrt 代码
-- 这是最稳定的选项
-- 编译会使用最新的源码
+- 先用 `main` 验证 workflow 本身是否恢复正常
+- 如果你要指定 tag，再使用 upstream 已确认存在的 tag
+- 这次如果 `feeds` 再失败，去下载 `build-logs` 里的 `feeds.log`，就能看到真正失败的 feed 和原始报错
 
 ---
 
-### 方案 2：使用已知的稳定版本
+### 如果你要指定版本标签
 
 **步骤**：
 
 1. 在 GitHub 仓库中，点击 **Actions**
 2. 选择 **"Build OpenWrt with iStoreOS"** 工作流
 3. 点击 **Run workflow**
-4. 在 **openwrt_branch** 输入框中输入以下任一版本：
-   - `v23.05.3` - OpenWrt 23.05.3（推荐）
-   - `v23.05.2` - OpenWrt 23.05.2
-   - `openwrt-23.05` - OpenWrt 23.05 系列
+4. 在 **openwrt_branch** 输入框中填写一个你已经在 upstream tags 页面确认存在的分支或标签
 5. 点击 **Run workflow** 开始编译
 
 **说明**：
-- 这些是官方发布的稳定版本
-- 经过充分测试
-- 兼容性最好
+- 不要把 workflow 失败和 tag 是否存在混为一谈
+- 先修 workflow，再判断是不是具体 feed 或具体 tag 的兼容性问题
 
 ---
 
-### 方案 3：检查可用版本
+### 如何确认下一次失败的真正原因
 
-**步骤**：
-
-1. 访问 https://github.com/openwrt/openwrt/tags
-2. 查看可用的版本标签
-3. 选择一个版本标签（例如 `v23.05.3`）
-4. 在工作流中使用该标签
-
-**推荐版本**：
-- `v23.05.3` - 最新的 23.05 系列
-- `v23.05.2` - 稳定版本
-- `main` - 最新开发版本
+1. 打开失败的 Actions 任务
+2. 下载 `build-logs` artifact
+3. 查看 `feeds.log`
+4. 搜索 `error`、`fatal`、`No package`、`Collected errors`
+5. 再决定是 feed 地址问题、上游仓库问题，还是包兼容性问题
 
 ---
 
@@ -73,18 +81,18 @@ OpenWrt 版本标签 `v25.12.2` 可能不存在或格式错误。
 
 ### 改进内容
 
-1. ✅ 更改输入参数为 `openwrt_branch`
+1. ✅ 修复 `actions/checkout` 非法参数
 2. ✅ 默认使用 `main` 分支
 3. ✅ 添加错误处理（如果指定分支失败，自动尝试 main）
 4. ✅ 使用浅克隆（`--depth 1`）加快下载
-5. ✅ 分离 feeds 更新步骤
+5. ✅ 为 `feeds`、`download`、`build` 单独保存日志
 6. ✅ 改进日志上传
 
 ### 新的工作流参数
 
 - **openwrt_branch**: OpenWrt 分支或标签
   - 默认值: `main`
-  - 可选值: `main`, `v23.05.3`, `openwrt-23.05` 等
+  - 可选值: `main`，或 upstream 已确认存在的 tag / branch
 
 - **enable_istoreos**: 是否启用 iStoreOS
   - 默认值: `true`
@@ -111,31 +119,26 @@ git push
 2. 选择 **"Build OpenWrt with iStoreOS"** 工作流
 3. 点击 **Run workflow**
 4. 设置参数：
-   - **openwrt_branch**: `main` 或 `v23.05.3`
+   - **openwrt_branch**: `main` 或 upstream 已确认存在的 tag / branch
    - **enable_istoreos**: `true`
 5. 点击 **Run workflow**
 
 ### 步骤 3：监控编译
 
 1. 在 Actions 页面查看实时日志
-2. 等待 4-8 小时
-3. 下载编译好的固件
+2. 如果失败，先下载 `build-logs` 里的 `feeds.log`
+3. 再根据 `feeds.log` 定位具体失败点
 
 ---
 
 ## 推荐配置
 
-### 最稳定配置
-
-- **openwrt_branch**: `v23.05.3`
-- **enable_istoreos**: `true`
-
-### 最新功能配置
+### 首次验证配置
 
 - **openwrt_branch**: `main`
 - **enable_istoreos**: `true`
 
-### 最小化配置
+### 最小排障配置
 
 - **openwrt_branch**: `main`
 - **enable_istoreos**: `false`
@@ -157,10 +160,7 @@ Node.js 20 actions are deprecated...
 
 ### Q: 应该使用哪个版本？
 
-**A**: 推荐使用 `main` 分支或 `v23.05.3`。
-
-- `main` - 最新代码，可能有新功能
-- `v23.05.3` - 稳定版本，经过测试
+**A**: 先用 `main` 验证 workflow 是否正常，再根据 upstream 已存在的 tag 选择固定版本。
 
 ### Q: 如何知道编译成功了？
 
@@ -170,9 +170,9 @@ Node.js 20 actions are deprecated...
 
 **A**: 
 1. 查看 Actions 日志
-2. 检查错误信息
-3. 尝试其他版本
-4. 查看 TROUBLESHOOTING.md
+2. 下载 `build-logs` artifact
+3. 先看 `feeds.log`
+4. 再决定是切版本还是改 feed
 
 ### Q: 需要重新 Fork 吗？
 
@@ -184,11 +184,9 @@ Node.js 20 actions are deprecated...
 
 1. ✅ 更新工作流文件
 2. ✅ 推送代码到 GitHub
-3. ✅ 运行编译（使用 `main` 或 `v23.05.3`）
-4. ✅ 等待编译完成
-5. ✅ 下载固件
-6. ✅ 刷机
-7. ✅ 享受你的专属 OpenWrt！
+3. ✅ 重新运行编译
+4. ✅ 如果失败先下载 `feeds.log`
+5. ✅ 根据真实报错继续修
 
 ---
 
@@ -209,6 +207,6 @@ Node.js 20 actions are deprecated...
 
 ---
 
-**修复完成！** 现在可以重新运行编译了。🚀
+**修复完成。**
 
-**推荐**: 使用 `main` 分支进行编译。
+**推荐**: 先用 `main` 重新跑一次，确认 workflow 层面的错误已经消失。

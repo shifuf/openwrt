@@ -58,3 +58,4 @@ core
 test/
 tests/
 *_test.go
+.ace-tool/
