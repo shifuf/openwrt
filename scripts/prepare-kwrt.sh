@@ -190,17 +190,17 @@ cp -Rf ./diy/* ./ 2>/dev/null || true
 
 apply_kwrt_patches
 
-sed -i '/^src-git passwall /d;/^src-git passwall-packages /d;/^# PassWall feeds added by local workflow$/d' feeds.conf.default
+sed -i '/^src-git passwall /d;/^src-git passwall_packages /d;/^# PassWall feeds added by local workflow$/d' feeds.conf.default
 printf '\n# PassWall feeds added by local workflow\n' >> feeds.conf.default
 echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;${PASSWALL_BRANCH}" >> feeds.conf.default
-echo "src-git passwall-packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;${PASSWALL_BRANCH}" >> feeds.conf.default
+echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;${PASSWALL_BRANCH}" >> feeds.conf.default
 
 echo "Updating PassWall feeds"
-./scripts/feeds update passwall passwall-packages
+./scripts/feeds update passwall passwall_packages
 
 echo "Installing PassWall feeds"
 ./scripts/feeds install -a -p passwall
-./scripts/feeds install -a -p passwall-packages
+./scripts/feeds install -a -p passwall_packages
 
 echo "Forcing default LAN IP to ${DEFAULT_LAN_IP}"
 force_default_lan_ip
