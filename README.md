@@ -6,7 +6,7 @@
 
 - 构建入口：`https://github.com/kiddin9/Kwrt`
 - 上游源码：`https://github.com/openwrt/openwrt`
-- Kwrt 包源：`https://github.com/kiddin9/kwrt-packages`
+- Kwrt 公共包源：`https://github.com/kiddin9/op-packages`
 - 额外保留的包源：
   - `https://github.com/Openwrt-Passwall/openwrt-passwall`
   - `https://github.com/Openwrt-Passwall/openwrt-passwall-packages`
@@ -31,7 +31,7 @@
 `Build Kwrt for JDCloud AX1800 Pro` 会按下面的顺序执行：
 
 1. 拉取 `Kwrt` 指定分支，默认 `25.12`。
-2. 拉取 `OpenWrt` 指定分支，默认 `openwrt-25.12`。
+2. 拉取 `OpenWrt` 指定分支，默认 `v25.12.2`。
 3. 将 `Kwrt` 的 `devices/common` 和 `devices/qualcommax_ipq60xx` 注入到源码树。
 4. 执行 `Kwrt` 的 common/device `diy.sh` 和设备补丁。
 5. 追加 `PassWall` feeds。
@@ -45,7 +45,7 @@
 3. 运行 `Build Kwrt for JDCloud AX1800 Pro`。
 4. 默认建议参数：
    - `kwrt_branch`: `25.12`
-   - `openwrt_branch`: `openwrt-25.12`
+   - `openwrt_branch`: `v25.12.2`
 
 如果你后面确认了别的 `Kwrt` 或 `OpenWrt` 分支，再改这两个输入。
 
@@ -79,9 +79,9 @@ CONFIG_PACKAGE_foo=y
 
 ## 默认信息
 
-`Kwrt` 的 common `diy.sh` 会把默认 LAN 地址改成 `10.0.0.1`。
+这个仓库的本地准备脚本会在 `Kwrt` common/device `diy.sh` 执行完成后，强制把默认后台地址改回 `192.168.1.1`。
 
-- 默认地址：`10.0.0.1`
+- 默认地址：`192.168.1.1`
 - 用户名：`root`
 - 默认密码：空，首次登录自行设置
 - 刷机方式：按你的 U-Boot 流程刷入生成的 `.bin`
