@@ -1,0 +1,60 @@
+# OpenWrt Builder .gitignore
+
+# 编译产物
+openwrt/
+*.bin
+*.img
+*.gz
+*.zip
+*.tar
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# 编辑器配置
+.vscode/
+.idea/
+*.sublime-*
+*.code-workspace
+
+# 临时文件
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+
+# 敏感信息
+.env
+*.pem
+*.key
+credentials.json
+
+# 依赖目录
+node_modules/
+vendor/
+
+# 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 构建目录
+build/
+dist/
+output/
+
+# 调试文件
+core
+*.core
+
+# 测试文件
+test/
+tests/
+*_test.go
