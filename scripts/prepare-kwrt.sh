@@ -93,6 +93,12 @@ apply_kwrt_patches() {
                 continue
                 ;;
         esac
+        case "$(basename "$patch_file")" in
+            base-files.patch)
+                echo "Skipping patch: $(basename "$patch_file") (known to fail on some OpenWrt 25.12 snapshots)"
+                continue
+                ;;
+        esac
         echo "Applying patch: $(basename "$patch_file")"
         patch -d "./" --no-backup-if-mismatch -p1 -F 1 --ignore-whitespace -i "$patch_file"
     done
