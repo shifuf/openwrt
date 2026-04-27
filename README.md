@@ -31,7 +31,7 @@
 `Build Kwrt for JDCloud AX1800 Pro` 会按下面的顺序执行：
 
 1. 拉取 `Kwrt` 指定分支，默认 `25.12`。
-2. 拉取 `OpenWrt` 指定分支，默认 `v25.12.2`。
+2. 拉取 `OpenWrt` 指定分支，默认 `openwrt-25.12`。
 3. 将 `Kwrt` 的 `devices/common` 和 `devices/qualcommax_ipq60xx` 注入到源码树。
 4. 执行 `Kwrt` 的 common/device `diy.sh` 和设备补丁。
 5. 追加 `PassWall` feeds。
@@ -45,9 +45,9 @@
 3. 运行 `Build Kwrt for JDCloud AX1800 Pro`。
 4. 默认建议参数：
    - `kwrt_branch`: `25.12`
-   - `openwrt_branch`: `v25.12.2`
+   - `openwrt_branch`: `openwrt-25.12`
 
-如果你后面确认了别的 `Kwrt` 或 `OpenWrt` 分支，再改这两个输入。
+如果你后面要手动改成别的 `OpenWrt` tag 或分支，也可以覆盖这个输入；但当前这套 `Kwrt 25.12` 设备补丁是按 `openwrt-25.12` 基线更稳。
 
 ## 构建产物和日志
 

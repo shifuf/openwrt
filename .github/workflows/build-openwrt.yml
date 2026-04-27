@@ -8,13 +8,13 @@ on:
         required: false
         default: '25.12'
       openwrt_branch:
-        description: 'OpenWrt branch or tag (for example: v25.12.2, openwrt-25.12 or main)'
+        description: 'OpenWrt branch or tag (for example: openwrt-25.12, v25.12.2 or main)'
         required: false
-        default: 'v25.12.2'
+        default: 'openwrt-25.12'
 
 env:
   KWRT_BRANCH: ${{ github.event.inputs.kwrt_branch || '25.12' }}
-  OPENWRT_BRANCH: ${{ github.event.inputs.openwrt_branch || 'v25.12.2' }}
+  OPENWRT_BRANCH: ${{ github.event.inputs.openwrt_branch || 'openwrt-25.12' }}
   KWRT_TARGET: 'qualcommax_ipq60xx'
   DEVICE_PROFILE: 'jdcloud_re-ss-01'
   TARGET: 'qualcommax'
