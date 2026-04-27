@@ -1,15 +1,21 @@
-name: Build OpenWrt for JDCloud AX1800 Pro
+name: Build Kwrt for JDCloud AX1800 Pro
 
 on:
   workflow_dispatch:
     inputs:
-      openwrt_branch:
-        description: 'OpenWrt branch or tag (e.g., main, openwrt-23.05, v23.05.3)'
+      kwrt_branch:
+        description: 'Kwrt branch (for example: 25.12)'
         required: false
-        default: 'main'
+        default: '25.12'
+      openwrt_branch:
+        description: 'OpenWrt branch or tag (for example: openwrt-25.12 or main)'
+        required: false
+        default: 'openwrt-25.12'
 
 env:
-  OPENWRT_BRANCH: ${{ github.event.inputs.openwrt_branch || 'main' }}
+  KWRT_BRANCH: ${{ github.event.inputs.kwrt_branch || '25.12' }}
+  OPENWRT_BRANCH: ${{ github.event.inputs.openwrt_branch || 'openwrt-25.12' }}
+  KWRT_TARGET: 'qualcommax_ipq60xx'
   DEVICE_PROFILE: 'jdcloud_re-ss-01'
   TARGET: 'qualcommax'
   SUBTARGET: 'ipq60xx'
@@ -18,6 +24,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 360
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout repository
@@ -40,22 +48,32 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y \
+          aria2 \
           build-essential \
           ccache \
-          ecj \
-          fastjar \
+          clang \
           file \
+          flex \
+          bison \
           g++ \
           gawk \
           gettext \
           git \
-          java-propose-classpath \
+          jq \
+          libc6-dev-i386 \
           libelf-dev \
+          libfuse-dev \
+          libgmp3-dev \
+          libmpc-dev \
+          libncurses5-dev \
           libncurses-dev \
           libssl-dev \
+          patch \
           python3 \
-          python3-distutils \
+          python3-pyelftools \
           python3-setuptools \
+          qemu-utils \
+          rename \
           rsync \
           subversion \
           swig \
@@ -64,30 +82,34 @@ jobs:
           xsltproc \
           zlib1g-dev
 
-    - name: Clone OpenWrt source
+    - name: Clone Kwrt and OpenWrt sources
       run: |
+        echo "Cloning Kwrt from branch: ${{ env.KWRT_BRANCH }}"
+        git clone --depth 1 --branch ${{ env.KWRT_BRANCH }} https://github.com/kiddin9/Kwrt.git kwrt
+
         echo "Cloning OpenWrt from branch: ${{ env.OPENWRT_BRANCH }}"
         git clone --depth 1 --branch ${{ env.OPENWRT_BRANCH }} https://github.com/openwrt/openwrt.git openwrt || {
-          echo "Failed to clone with branch ${{ env.OPENWRT_BRANCH }}, trying main..."
-          git clone --depth 1 https://github.com/openwrt/openwrt.git openwrt
+          echo "Failed to clone with branch ${{ env.OPENWRT_BRANCH }}, trying openwrt-25.12..."
+          rm -rf openwrt
+          git clone --depth 1 --branch openwrt-25.12 https://github.com/openwrt/openwrt.git openwrt
         }
 
         cd openwrt
         echo "Current OpenWrt version:"
         git describe --tags --always || git log --oneline -1
+        sudo mkdir -p /mnt/openwrt/build_dir
+        ln -sfn /mnt/openwrt/build_dir build_dir
         touch feeds.log download.log build.log
 
-    - name: Update feeds
+    - name: Prepare Kwrt source and feeds
+      env:
+        REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        cd openwrt
         set -o pipefail
-        echo "Updating feeds..." | tee feeds.log
-        ./scripts/feeds update -a 2>&1 | tee -a feeds.log
-        ./scripts/feeds install -a 2>&1 | tee -a feeds.log
+        bash scripts/prepare-kwrt.sh openwrt kwrt config/qualcommax_ipq60xx.config 2>&1 | tee openwrt/feeds.log
 
-    - name: Load custom configuration
+    - name: Resolve custom configuration
       run: |
-        cp config/qualcommax_ipq60xx.config openwrt/.config
         cd openwrt
         make defconfig
 
@@ -105,7 +127,6 @@ jobs:
         echo "Starting build at $(date)"
         START_TIME=$(date +%s)
 
-        # Build with multiple cores, fallback to single core on error
         make -j$(nproc) V=s 2>&1 | tee build.log || {
           echo "Multi-core build failed, trying single core..."
           make -j1 V=s 2>&1 | tee -a build.log
@@ -120,14 +141,13 @@ jobs:
         cd openwrt
         echo "Checking build results..."
 
-        # Check if firmware was built
         if ls bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin 2>/dev/null; then
-          echo "✓ Firmware built successfully!"
+          echo "Firmware built successfully."
           echo "Built files:"
-          ls -lh bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
+          ls -lh bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/
         else
-          echo "✗ Firmware build failed!"
-          echo "Check build.log for details"
+          echo "Firmware build failed."
+          echo "Check build.log for details."
           exit 1
         fi
 
@@ -135,8 +155,8 @@ jobs:
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: openwrt-jdcloud-ax1800-pro
-        path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
+        name: kwrt-jdcloud-ax1800-pro
+        path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/
         retention-days: 30
 
     - name: Upload build logs
@@ -150,31 +170,3 @@ jobs:
           openwrt/build.log
         if-no-files-found: ignore
         retention-days: 30
-
-    - name: Generate release notes
-      if: startsWith(github.ref, 'refs/tags/')
-      run: |
-        echo "## OpenWrt ${{ env.OPENWRT_BRANCH }} for JDCloud AX1800 Pro" > release_notes.md
-        echo "" >> release_notes.md
-        echo "### Build Information" >> release_notes.md
-        echo "- **Target**: qualcommax/ipq60xx" >> release_notes.md
-        echo "- **Profile**: jdcloud_re-ss-01" >> release_notes.md
-        echo "- **OpenWrt Branch**: ${{ env.OPENWRT_BRANCH }}" >> release_notes.md
-        echo "- **Date**: $(date '+%Y-%m-%d %H:%M:%S')" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Included Packages" >> release_notes.md
-        echo "- PassWall (proxy tools)" >> release_notes.md
-        echo "- iStoreOS (app store)" >> release_notes.md
-        echo "- LuCI web interface" >> release_notes.md
-        echo "- WiFi 6 (ath11k)" >> release_notes.md
-        echo "- NSS network acceleration" >> release_notes.md
-        echo "- Various system utilities" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Software Sources" >> release_notes.md
-        echo "- OpenWrt: https://github.com/openwrt/openwrt" >> release_notes.md
-        echo "- PassWall: https://github.com/Openwrt-Passwall/openwrt-passwall" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "### Installation" >> release_notes.md
-        echo "1. Download the firmware file" >> release_notes.md
-        echo "2. Flash via U-Boot" >> release_notes.md
-        echo "3. Default IP: 192.168.1.1" >> release_notes.md

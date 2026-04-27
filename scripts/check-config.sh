@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# OpenWrt 配置检查脚本
+# Kwrt/OpenWrt 配置检查脚本
 # 检查配置文件是否包含所有必需的软件包
 
 CONFIG_FILE="config/qualcommax_ipq60xx.config"
@@ -27,7 +27,7 @@ check_package() {
     if grep -q "CONFIG_PACKAGE_${package}=y" "$CONFIG_FILE"; then
         echo -e "${GREEN}✓${NC} $package - $description"
         FOUND=$((FOUND + 1))
-    elif grep -q "CONFIG_PACKAGE_${package}=n" "$CONFIG_FILE"; then
+    elif grep -q "^CONFIG_PACKAGE_${package}=n$" "$CONFIG_FILE" || grep -q "^# CONFIG_PACKAGE_${package} is not set$" "$CONFIG_FILE"; then
         echo -e "${YELLOW}○${NC} $package - $description (disabled)"
     else
         echo -e "${RED}✗${NC} $package - $description (missing)"
@@ -36,16 +36,8 @@ check_package() {
 }
 
 echo -e "${BLUE}===================================${NC}"
-echo -e "${BLUE}OpenWrt 配置检查${NC}"
+echo -e "${BLUE}Kwrt/OpenWrt 配置检查${NC}"
 echo -e "${BLUE}===================================${NC}"
-echo ""
-
-# 检查 iStoreOS 核心包
-echo -e "${BLUE}iStoreOS 核心包:${NC}"
-check_package "luci-app-store" "iStore 应用商店"
-check_package "luci-app-istorex" "iStoreX 扩展商店"
-check_package "luci-app-quickstart" "快速配置向导"
-check_package "luci-app-ttyd" "Web 终端"
 echo ""
 
 # 检查 PassWall 核心包
@@ -68,25 +60,18 @@ echo -e "${BLUE}LuCI 界面:${NC}"
 check_package "luci" "LuCI 核心"
 check_package "luci-base" "LuCI 基础"
 check_package "luci-compat" "LuCI 兼容层"
-check_package "luci-theme-argon" "Argon 主题"
 check_package "luci-app-firewall" "防火墙管理"
 check_package "luci-app-upnp" "UPnP 管理"
-check_package "luci-app-advancedplus" "高级设置"
-check_package "luci-app-fan" "风扇控制"
 check_package "luci-app-filemanager" "文件管理器"
 check_package "luci-app-package-manager" "软件包管理"
-check_package "luci-app-syscontrol" "系统控制"
 check_package "luci-app-wifihistory" "WiFi 历史"
-check_package "luci-app-wizard" "配置向导"
 echo ""
 
 # 检查系统核心
 echo -e "${BLUE}系统核心:${NC}"
 check_package "base-files" "基础文件系统"
 check_package "bash" "Bash Shell"
-check_package "busybox" "BusyBox"
 check_package "dropbear" "SSH 服务器"
-check_package "procd" "进程管理"
 check_package "netifd" "网络接口守护进程"
 check_package "fstools" "文件系统工具"
 check_package "block-mount" "块设备挂载"
@@ -135,7 +120,6 @@ check_package "libgcc" "GCC 运行时库"
 check_package "openssh-sftp-server" "SFTP 服务器"
 check_package "zram-swap" "ZRAM 交换"
 check_package "losetup" "循环设备"
-check_package "zram-swap" "ZRAM 交换"
 echo ""
 
 # 检查 WiFi 驱动

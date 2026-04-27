@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# OpenWrt Configuration Modifier
+# Kwrt/OpenWrt Configuration Modifier
 # 帮助用户轻松添加或移除软件包
 
 CONFIG_FILE="config/qualcommax_ipq60xx.config"
@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # 显示帮助信息
 show_help() {
-    echo -e "${BLUE}OpenWrt 配置修改工具${NC}"
+    echo -e "${BLUE}Kwrt/OpenWrt 配置修改工具${NC}"
     echo ""
     echo "用法:"
     echo "  $0 [选项]"
@@ -30,7 +30,7 @@ show_help() {
     echo ""
     echo "示例:"
     echo "  $0 -a luci-app-openclash"
-    echo "  $0 -r luci-app-istorex"
+    echo "  $0 -r luci-app-openclash"
     echo "  $0 -l"
     echo ""
 }
@@ -45,14 +45,20 @@ add_package() {
     fi
 
     # 检查是否已存在
-    if grep -q "CONFIG_PACKAGE_${package}=y" "$CONFIG_FILE"; then
+    if grep -q "^CONFIG_PACKAGE_${package}=y$" "$CONFIG_FILE"; then
         echo -e "${YELLOW}警告: ${package} 已经在配置中${NC}"
         return 0
     fi
 
     # 如果存在但被禁用，启用它
-    if grep -q "CONFIG_PACKAGE_${package}=n" "$CONFIG_FILE"; then
-        sed -i "s/CONFIG_PACKAGE_${package}=n/CONFIG_PACKAGE_${package}=y/" "$CONFIG_FILE"
+    if grep -q "^CONFIG_PACKAGE_${package}=n$" "$CONFIG_FILE"; then
+        sed -i "s/^CONFIG_PACKAGE_${package}=n$/CONFIG_PACKAGE_${package}=y/" "$CONFIG_FILE"
+        echo -e "${GREEN}✓ 已启用: ${package}${NC}"
+        return 0
+    fi
+
+    if grep -q "^# CONFIG_PACKAGE_${package} is not set$" "$CONFIG_FILE"; then
+        sed -i "s/^# CONFIG_PACKAGE_${package} is not set$/CONFIG_PACKAGE_${package}=y/" "$CONFIG_FILE"
         echo -e "${GREEN}✓ 已启用: ${package}${NC}"
         return 0
     fi
@@ -71,11 +77,11 @@ remove_package() {
         return 1
     fi
 
-    if grep -q "CONFIG_PACKAGE_${package}=y" "$CONFIG_FILE"; then
-        sed -i "s/CONFIG_PACKAGE_${package}=y/CONFIG_PACKAGE_${package}=n/" "$CONFIG_FILE"
+    if grep -q "^CONFIG_PACKAGE_${package}=y$" "$CONFIG_FILE"; then
+        sed -i "s/^CONFIG_PACKAGE_${package}=y$/# CONFIG_PACKAGE_${package} is not set/" "$CONFIG_FILE"
         echo -e "${GREEN}✓ 已禁用: ${package}${NC}"
         return 0
-    elif grep -q "CONFIG_PACKAGE_${package}=n" "$CONFIG_FILE"; then
+    elif grep -q "^CONFIG_PACKAGE_${package}=n$" "$CONFIG_FILE" || grep -q "^# CONFIG_PACKAGE_${package} is not set$" "$CONFIG_FILE"; then
         echo -e "${YELLOW}警告: ${package} 已经被禁用${NC}"
         return 0
     else
@@ -118,7 +124,10 @@ list_packages() {
     echo ""
     echo -e "${BLUE}已禁用的软件包:${NC}"
     echo ""
-    grep "CONFIG_PACKAGE_.*=n" "$CONFIG_FILE" | sed 's/CONFIG_PACKAGE_/  /' | sed 's/=n//' | sort
+    {
+        grep "CONFIG_PACKAGE_.*=n" "$CONFIG_FILE" | sed 's/CONFIG_PACKAGE_/  /' | sed 's/=n//'
+        grep "^# CONFIG_PACKAGE_.* is not set$" "$CONFIG_FILE" | sed 's/^# CONFIG_PACKAGE_/  /' | sed 's/ is not set$//'
+    } | sort -u
 }
 
 # 搜索软件包
