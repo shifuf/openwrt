@@ -3,10 +3,10 @@ name: Build OpenWrt with iStoreOS for JDCloud AX1800 Pro
 on:
   workflow_dispatch:
     inputs:
-      openwrt_version:
-        description: 'OpenWrt version tag (e.g., v25.12.2)'
+      openwrt_branch:
+        description: 'OpenWrt branch or tag (e.g., main, openwrt-23.05, v23.05.3)'
         required: false
-        default: 'v25.12.2'
+        default: 'main'
       enable_istoreos:
         description: 'Enable iStoreOS support'
         required: false
@@ -14,7 +14,7 @@ on:
         type: boolean
 
 env:
-  OPENWRT_VERSION: ${{ github.event.inputs.openwrt_version || 'v25.12.2' }}
+  OPENWRT_BRANCH: ${{ github.event.inputs.openwrt_branch || 'main' }}
   DEVICE_PROFILE: 'jdcloud_re-ss-01'
   TARGET: 'qualcommax'
   SUBTARGET: 'ipq60xx'
@@ -23,11 +23,13 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 480  # 8 hours for full build
+    timeout-minutes: 480
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        force: true
 
     - name: Free up disk space
       run: |
@@ -56,7 +58,18 @@ jobs:
 
     - name: Clone OpenWrt source
       run: |
-        git clone https://github.com/openwrt/openwrt.git -b ${{ env.OPENWRT_VERSION }} openwrt
+        echo "Cloning OpenWrt from branch: ${{ env.OPENWRT_BRANCH }}"
+        git clone --depth 1 --branch ${{ env.OPENWRT_BRANCH }} https://github.com/openwrt/openwrt.git openwrt || {
+          echo "Failed to clone with branch ${{ env.OPENWRT_BRANCH }}, trying main..."
+          git clone --depth 1 https://github.com/openwrt/openwrt.git openwrt
+        }
+
+        cd openwrt
+        echo "Current OpenWrt version:"
+        git describe --tags --always || git log --oneline -1
+
+    - name: Update feeds
+      run: |
         cd openwrt
 
         # Update main feeds
@@ -68,16 +81,19 @@ jobs:
         if [ "${{ env.ENABLE_ISTOREOS }}" = "true" ]; then
           echo "Adding iStoreOS feed..."
           echo "src-git kiddin9 https://github.com/kiddin9/openwrt-packages.git;master" >> feeds.conf.default
-
-          # Also add passwall feed (official repository)
-          echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
-          echo "src-git passwall-packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
-
-          # Update all feeds
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a -p kiddin9
-          ./scripts/feeds install -a -p passwall
         fi
+
+        # Add passwall feed
+        echo "Adding PassWall feed..."
+        echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> feeds.conf.default
+        echo "src-git passwall-packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> feeds.conf.default
+
+        # Update all feeds
+        echo "Updating all feeds..."
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a -p kiddin9 || echo "Warning: kiddin9 feed update failed"
+        ./scripts/feeds install -a -p passwall || echo "Warning: passwall feed update failed"
+        ./scripts/feeds install -a -p passwall-packages || echo "Warning: passwall-packages feed update failed"
 
     - name: Load custom configuration
       run: |
@@ -152,6 +168,7 @@ jobs:
         fi
 
     - name: Upload firmware
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: openwrt-jdcloud-ax1800-pro-istoreos
@@ -172,12 +189,12 @@ jobs:
     - name: Generate release notes
       if: startsWith(github.ref, 'refs/tags/')
       run: |
-        echo "## OpenWrt v25.12.2 for JDCloud AX1800 Pro" > release_notes.md
+        echo "## OpenWrt ${{ env.OPENWRT_BRANCH }} for JDCloud AX1800 Pro" > release_notes.md
         echo "" >> release_notes.md
         echo "### Build Information" >> release_notes.md
         echo "- **Target**: qualcommax/ipq60xx" >> release_notes.md
         echo "- **Profile**: jdcloud_re-ss-01" >> release_notes.md
-        echo "- **OpenWrt Version**: v25.12.2" >> release_notes.md
+        echo "- **OpenWrt Branch**: ${{ env.OPENWRT_BRANCH }}" >> release_notes.md
         echo "- **iStoreOS**: ${{ env.ENABLE_ISTOREOS }}" >> release_notes.md
         echo "- **Date**: $(date '+%Y-%m-%d %H:%M:%S')" >> release_notes.md
         echo "" >> release_notes.md

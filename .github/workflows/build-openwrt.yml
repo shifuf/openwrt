@@ -3,13 +3,13 @@ name: Build OpenWrt for JDCloud AX1800 Pro
 on:
   workflow_dispatch:
     inputs:
-      openwrt_version:
-        description: 'OpenWrt version tag (e.g., v25.12.2)'
+      openwrt_branch:
+        description: 'OpenWrt branch or tag (e.g., main, openwrt-23.05, v23.05.3)'
         required: false
-        default: 'v25.12.2'
+        default: 'main'
 
 env:
-  OPENWRT_VERSION: ${{ github.event.inputs.openwrt_version || 'v25.12.2' }}
+  OPENWRT_BRANCH: ${{ github.event.inputs.openwrt_branch || 'main' }}
   DEVICE_PROFILE: 'jdcloud_re-ss-01'
   TARGET: 'qualcommax'
   SUBTARGET: 'ipq60xx'
@@ -22,13 +22,18 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        force: true
 
     - name: Free up disk space
       run: |
+        echo "Before cleanup:"
+        df -h
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
         sudo apt-get clean
+        echo "After cleanup:"
         df -h
 
     - name: Install dependencies
@@ -61,60 +66,93 @@ jobs:
 
     - name: Clone OpenWrt source
       run: |
-        git clone https://github.com/openwrt/openwrt.git -b ${{ env.OPENWRT_VERSION }} openwrt
-        cd openwrt
+        echo "Cloning OpenWrt from branch: ${{ env.OPENWRT_BRANCH }}"
+        git clone --depth 1 --branch ${{ env.OPENWRT_BRANCH }} https://github.com/openwrt/openwrt.git openwrt || {
+          echo "Failed to clone with branch ${{ env.OPENWRT_BRANCH }}, trying main..."
+          git clone --depth 1 https://github.com/openwrt/openwrt.git openwrt
+        }
 
-        # Update feeds
+        cd openwrt
+        echo "Current OpenWrt version:"
+        git describe --tags --always || git log --oneline -1
+
+    - name: Update feeds
+      run: |
+        cd openwrt
+        echo "Updating feeds..."
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
-        # Add iStoreOS (kiddin9) feed
-        echo "src-git kiddin9 https://github.com/kiddin9/openwrt-packages.git;master" >> feeds.conf.default
-        ./scripts/feeds update kiddin9
-        ./scripts/feeds install -a -p kiddin9
 
     - name: Load custom configuration
       run: |
         cp config/qualcommax_ipq60xx.config openwrt/.config
         cd openwrt
-
-        # Configure iStoreOS packages
-        echo "CONFIG_PACKAGE_luci-app-store=y" >> .config
-        echo "CONFIG_PACKAGE_luci-app-istorex=y" >> .config
-        echo "CONFIG_PACKAGE_luci-app-quickstart=y" >> .config
-
-        # Disable Chinese language packs if they cause issues
-        echo "# CONFIG_PACKAGE_luci-i18n-base-zh-cn is not set" >> .config
-        echo "# CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn is not set" >> .config
-
         make defconfig
 
     - name: Download packages
       run: |
         cd openwrt
+        echo "Downloading package sources..."
         make download -j$(nproc)
 
     - name: Build firmware
       run: |
         cd openwrt
-        make -j$(nproc) || make -j1 V=s
+        echo "Starting build at $(date)"
+        START_TIME=$(date +%s)
+
+        # Build with multiple cores, fallback to single core on error
+        make -j$(nproc) V=s 2>&1 | tee build.log || {
+          echo "Multi-core build failed, trying single core..."
+          make -j1 V=s 2>&1 | tee -a build.log
+        }
+
+        END_TIME=$(date +%s)
+        DURATION=$((END_TIME - START_TIME))
+        echo "Build completed in $((DURATION / 60)) minutes"
+
+    - name: Check build results
+      run: |
+        cd openwrt
+        echo "Checking build results..."
+
+        # Check if firmware was built
+        if ls bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin 2>/dev/null; then
+          echo "✓ Firmware built successfully!"
+          echo "Built files:"
+          ls -lh bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
+        else
+          echo "✗ Firmware build failed!"
+          echo "Check build.log for details"
+          exit 1
+        fi
 
     - name: Upload firmware
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: openwrt-jdcloud-ax1800-pro
         path: openwrt/bin/targets/${{ env.TARGET }}/${{ env.SUBTARGET }}/*.bin
         retention-days: 30
 
+    - name: Upload build logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          openwrt/build.log
+        retention-days: 30
+
     - name: Generate release notes
       if: startsWith(github.ref, 'refs/tags/')
       run: |
-        echo "## OpenWrt v25.12.2 for JDCloud AX1800 Pro" > release_notes.md
+        echo "## OpenWrt ${{ env.OPENWRT_BRANCH }} for JDCloud AX1800 Pro" > release_notes.md
         echo "" >> release_notes.md
         echo "### Build Information" >> release_notes.md
         echo "- **Target**: qualcommax/ipq60xx" >> release_notes.md
         echo "- **Profile**: jdcloud_re-ss-01" >> release_notes.md
-        echo "- **OpenWrt Version**: v25.12.2" >> release_notes.md
+        echo "- **OpenWrt Branch**: ${{ env.OPENWRT_BRANCH }}" >> release_notes.md
         echo "- **Date**: $(date '+%Y-%m-%d %H:%M:%S')" >> release_notes.md
         echo "" >> release_notes.md
         echo "### Included Packages" >> release_notes.md
@@ -128,7 +166,6 @@ jobs:
         echo "### Software Sources" >> release_notes.md
         echo "- OpenWrt: https://github.com/openwrt/openwrt" >> release_notes.md
         echo "- PassWall: https://github.com/Openwrt-Passwall/openwrt-passwall" >> release_notes.md
-        echo "- iStoreOS: https://github.com/kiddin9/openwrt-packages" >> release_notes.md
         echo "" >> release_notes.md
         echo "### Installation" >> release_notes.md
         echo "1. Download the firmware file" >> release_notes.md
