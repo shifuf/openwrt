@@ -9,6 +9,10 @@
 name: Build OpenWrt
 
 on:
+  push:
+    branches:
+      - master
+      - main
   repository_dispatch:
   workflow_dispatch:
     inputs:
@@ -37,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ["${{ github.event.client_payload.target || github.event.inputs.target }}"]
+        target: ["${{ github.event.client_payload.target || github.event.inputs.target || 'qualcommax_ipq60xx' }}"]
         
     steps:
     - name: Checkout
